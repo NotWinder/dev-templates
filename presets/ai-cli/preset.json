@@ -1,0 +1,4 @@
+{
+  "description": "Lightweight AI-assisted CLI tool",
+  "layers": ["base", "ai", "cli"]
+}

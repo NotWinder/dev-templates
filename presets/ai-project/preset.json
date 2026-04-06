@@ -1,0 +1,4 @@
+{
+  "description": "Full AI-driven project with CLI and infrastructure",
+  "layers": ["base", "ai", "cli", "infra"]
+}
