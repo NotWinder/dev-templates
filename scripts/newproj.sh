@@ -100,16 +100,22 @@ cp -r "$TEMPLATES_DIR/base/." "$DEST/"
 
 echo "  Substituting [PROJECT_NAME] → $NAME"
 
+# Detect sed flavour for in-place editing (GNU vs BSD/macOS)
+if sed --version 2>/dev/null | grep -q GNU; then
+  _sed_inplace() { sed -i "s/\[PROJECT_NAME\]/$NAME/g" "$1"; }
+else
+  _sed_inplace() { sed -i '' "s/\[PROJECT_NAME\]/$NAME/g" "$1"; }
+fi
+
 # Find all text files and do in-place substitution (skip .git and binary files)
 while IFS= read -r -d '' file; do
-  # Skip binary files
-  if file "$file" | grep -q 'binary\|ELF\|image\|audio\|video'; then
-    continue
-  fi
   # Skip .gitkeep
   [[ "$(basename "$file")" == ".gitkeep" ]] && continue
 
-  sed -i "s/\[PROJECT_NAME\]/$NAME/g" "$file" 2>/dev/null || true
+  # Skip binary files (grep -I exits non-zero for binary files)
+  grep -qI '' "$file" 2>/dev/null || continue
+
+  _sed_inplace "$file" 2>/dev/null || true
 done < <(find "$DEST" -not -path '*/.git/*' -type f -print0)
 
 # ── git init ──────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # Dev Template System — Reference & Context
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-07 (updated after agent/script improvements)
 > Purpose: Reference document for the `~/dev/templates/` system — what it is, how it works, and how to evolve it.
 
 ---
@@ -34,7 +34,8 @@ from **layers** on top of a **base**, then wrapped into **presets** for common c
 │       ├── setup.sh
 │       ├── run.sh                 # Stub — override in project root
 │       ├── test.sh                # Stub — override in project root
-│       └── lint.sh                # Stub — override in project root
+│       ├── lint.sh                # Stub — override in project root
+│       └── validate.sh            # Strict project consistency validator
 │
 ├── layers/                        # Composable feature layers
 │   ├── ai/                        # AI-driven workflow layer
@@ -153,8 +154,12 @@ Sections:
 - **Overview** — what the project does
 - **Structure** — what lives where
 - **Stack** — language, framework, key deps
+- **Source of Truth** — priority order for resolving conflicts between docs, code, and git
+- **Behavior Rules** — how the AI must verify claims before answering
+- **Task Rules** — one-task invariant, format requirements, validate.sh enforcement
+- **Git Rules** — working directory takes precedence over git history
 - **Conventions** — naming, style, patterns
-- **Workflows** — how to run, test, build
+- **Workflows** — how to run, test, build, lint, validate
 - **Current Focus** — what's actively being worked on
 - **Known Issues** — gotchas, workarounds, tech debt
 
@@ -173,6 +178,23 @@ The base layer provides stub scripts (`run.sh`, `test.sh`, `lint.sh`) that print
 exit. These exist so `AGENTS.md`'s workflow references are never broken. Override them at the
 project level or by applying a layer that provides real implementations (e.g., `cli` or `infra`).
 
+`validate.sh` is a strict project consistency validator. It enforces:
+- Exactly **one** task exists in `tasks/in-progress/` at all times
+- No duplicate task filenames across `backlog/` and `in-progress/`
+- No task exists in both `in-progress/` and `done/`
+- All active tasks contain the four required sections (`## Goal`, `## Context`, `## Acceptance Criteria`, `## Steps`)
+- Required scripts (`run.sh`, `test.sh`, `setup.sh`) are present
+
+It also emits a **warning** (non-fatal) if any file in `tasks/done/` is newer than `docs/context.md`,
+which indicates a task may have completed without updating context.
+
+Run it before starting any task: `./scripts/validate.sh`
+
+> **Fresh projects:** a newly scaffolded project has zero tasks in `in-progress/`, so
+> `validate.sh` will fail immediately. This is expected — run `/next` first to move a task
+> from the backlog, then the builder can proceed. The `/next` command explicitly handles the
+> 0-task case and does not require validation to pass before moving a task.
+
 ### `base/.opencode/` (base)
 Empty placeholder directories (`agents/`, `commands/`) for project-level overrides.
 The `.gitkeep` files keep these tracked by git. Drop agent or command files here to
@@ -182,6 +204,21 @@ customise opencode behaviour for a specific project without changing the shared 
 Persistent context file for AI sessions. Unlike `AGENTS.md` which describes the project structure,
 `context.md` describes the *current state* — what works, what's in flight, what's out of scope.
 Update it regularly. Reference it in opencode with `@docs/context.md`.
+The builder agent updates it after completing every task.
+
+### `docs/plan.md` (ai layer)
+Current milestone and task priority order. The planner writes to this when planning a feature.
+The `/next` command reads it to decide which backlog task to move into `in-progress/` — tasks
+listed here take precedence over alphabetical filename order.
+
+### `docs/decisions.md` (ai layer)
+ADR-style log of architectural and design decisions. The planner and reviewer both read this
+before acting, so decisions made in previous sessions inform new work and review findings.
+
+### `docs/architecture.md` (ai layer)
+High-level structural description of the project — major components, boundaries, and data flow.
+The planner reads this before creating tasks to avoid producing work that conflicts with the
+intended structure.
 
 ### `tasks/` (ai layer)
 The AI task queue. Three-state kanban on the filesystem:
@@ -226,17 +263,12 @@ Task files are named `YYYYMMDD-slug.md` and follow this format:
 
 All agent files live in `.opencode/agents/` at the project root after scaffolding.
 
-| Agent | Purpose | Modifies files? |
+| Agent | Purpose | Modifies source code? |
 |---|---|---|
-| `planner` | Breaks goals into tasks, writes to backlog | No (only tasks/) |
-| `builder` | Implements tasks from in-progress/ | Yes |
-| `reviewer` | Reviews code for quality and conventions | No |
-| `task-expander` | Expands vague tasks into concrete subtasks | No (only tasks/) |
-
-Invoke with `@agentname` in an opencode message, e.g.:
-```
-@planner I want to add an export feature. Plan it out.
-```
+| `planner` | Reads AGENTS.md + docs, breaks goals into tasks, writes to backlog | No (writes to `tasks/` only) |
+| `builder` | Reads AGENTS.md, checkpoints any partial work via git, implements the in-progress task, runs tests + lint | Yes |
+| `reviewer` | Reads AGENTS.md + decisions, reviews code for quality and conventions | No |
+| `task-expander` | Reads AGENTS.md + context, expands vague tasks into concrete subtasks | No (writes to `tasks/`, moves original to `done/`) |
 
 Switch the active agent with `Tab` in the TUI.
 
@@ -248,9 +280,10 @@ Custom opencode slash commands live in `.opencode/commands/` and are available i
 
 | Command | Agent | What it does |
 |---|---|---|
-| `/expand <description>` | task-expander | Breaks a vague task into subtasks in backlog/ |
-| `/next` | builder | Picks next backlog task, moves to in-progress, implements it |
-| `/review <file or path>` | reviewer | Reviews the specified file or recent changes |
+| `/next` | planner | Runs validate.sh; if no task is in-progress, moves the next backlog task there (priority from plan.md, then filename order) |
+| `/build` | builder | Implements the current in-progress task — runs validate.sh, writes code, tests, lint, moves task to done/ |
+| `/expand [description]` | task-expander | Expands a task into subtasks; lists backlog and prompts if no argument given |
+| `/review [file or path]` | reviewer | Reviews the specified file or recent git changes if no argument given |
 
 ---
 
@@ -274,24 +307,29 @@ Custom opencode slash commands live in `.opencode/commands/` and are available i
    /expand [vague task description]
    → task-expander breaks it into smaller tasks
 
-6. Build
-   Tab  (switch to builder / build mode)
+6. Start next task
    /next
-   → Builder picks next task and implements it
+   → Moves the next backlog task to in-progress (uses plan.md priority order)
+   → Confirm the correct task was selected before proceeding
 
-7. Review
-   @reviewer  (or /review src/)
+7. Implement it
+   /build
+   → Builder reads AGENTS.md, runs validate.sh, implements the task, runs tests + lint,
+     moves task to done/, updates docs/context.md
+
+8. Review
+   /review src/
    → Reviewer reports findings without touching code
 
-8. Repeat from step 6 until milestone is done
+9. Repeat from step 6 until milestone is done
 
-9. Update docs/plan.md and docs/context.md
-   Keep them current so future sessions have good context
+10. Update docs/plan.md and docs/context.md
+    Keep them current so future sessions have good context
 ```
 
 ---
 
-## Known Issues & Decisions
+## Design Decisions
 
 ### Agents must be in `.opencode/agents/`, not `agents/`
 Opencode only resolves `@agentname` from `.opencode/agents/`. The template was initially
@@ -311,6 +349,65 @@ The script uses `cp -r "$src/." "$DEST/"` to include hidden files and directorie
 They exist to keep `AGENTS.md` workflow references valid at all times, and to make
 it obvious when a project hasn't been wired up yet. Replace them at the project level.
 
+### `validate.sh` implemented in `base/scripts/`
+Initially listed as a future improvement, `validate.sh` is now fully implemented. It is a
+strict consistency validator that enforces the one-task invariant, checks for task format
+compliance, detects duplicates, and verifies required scripts exist. The builder agent runs
+it as a mandatory pre-flight check before executing any task.
+
+### Builder reads `AGENTS.md` before any work
+The builder agent runs `AGENTS.md` as its first pre-flight step, before `validate.sh`. This
+ensures project conventions, stack details, and naming rules are loaded into context before
+any code is written.
+
+### Task-expander moves originals to `done/`
+The task-expander previously said "archive or delete" the original vague task — ambiguous
+and inconsistent with the three-state kanban. It now always moves the original to `tasks/done/`.
+
+### Builder runs lint as part of task completion
+Lint is a required step in the builder's completion workflow, run after tests pass. A task is
+not considered complete until both `./scripts/test.sh` and `./scripts/lint.sh` pass.
+
+### `sed -i` portability (GNU vs BSD)
+GNU `sed -i` (Linux) and BSD `sed -i` (macOS) require different syntax for in-place editing.
+`newproj.sh` detects which flavour is present at runtime and selects the correct form, so
+`[PROJECT_NAME]` substitution works on both platforms. Binary file detection uses `grep -qI`
+(portable) rather than the `file` command (not always available).
+
+### Builder creates a git checkpoint before writing code
+After `validate.sh` passes, the builder runs `git add -A && git commit -m "chore: wip <task>"` before
+touching any source files. If there is nothing to commit (clean start) this is a no-op. If a
+previous session was interrupted mid-implementation, the partial work is committed first, giving
+a clean rollback point before new code is added.
+
+### Builder has explicit interrupted-session recovery cases
+The builder's Recovery Behavior distinguishes three cases: (A) clean start with no prior work,
+(B) interrupted mid-implementation with uncommitted changes — assess what's done and continue
+without re-doing completed work, (C) implementation appears complete — run tests and lint and
+complete the lifecycle if they pass.
+
+### `validate.sh` warns on stale `docs/context.md`
+If any file in `tasks/done/` is newer than `docs/context.md`, `validate.sh` emits a warning
+(non-fatal). This surfaces the most likely symptom of an interrupted completion — the task was
+moved to done but context was never updated.
+
+---
+
+## Known Limitations
+
+### `validate.sh` requires exactly one in-progress task
+A freshly scaffolded project has zero tasks, so `validate.sh` will always fail on a new project.
+Run `/next` first to move a task from backlog to in-progress before invoking the builder.
+See the note in the `validate.sh` section above.
+
+### Interrupting a task mid-implementation is safe; interrupting the completion lifecycle is not
+If a session is interrupted while the builder is writing code, the next `/build` will detect
+the partial work (via `git status`), commit it as a checkpoint, and continue from where it left
+off. However, if a session is interrupted *after* `mv tasks/in-progress/ → tasks/done/` but
+*before* `docs/context.md` is updated, the task count drops to zero, `validate.sh` warns about
+stale context, and the user must manually update `docs/context.md` before running `/next`.
+There is no automated recovery for the narrow window between the `mv` and the context update.
+
 ---
 
 ## Future Improvements
@@ -319,6 +416,5 @@ it obvious when a project hasn't been wired up yet. Replace them at the project 
 - [ ] Add a `python-lib` layer for standalone Python packages
 - [ ] Add `.opencode/commands/plan.md` — trigger a full planning session from scratch
 - [ ] Populate `docs/context.md` with project name during scaffold (currently blank)
-- [ ] Add a `validate.sh` script that checks a scaffolded project for missing required files
 - [ ] Consider moving `tasks/` into `.opencode/tasks/` to keep AI workflow files together
 - [ ] Add a `--list` flag to `newproj.sh` to enumerate available layers and presets

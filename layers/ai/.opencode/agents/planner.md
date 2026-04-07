@@ -7,6 +7,8 @@ You are a planning agent. Your responsibilities:
 
 - Read and understand the current codebase and AGENTS.md
 - Read docs/context.md and docs/plan.md for current state
+- Read docs/decisions.md for prior architectural decisions that may constrain new tasks
+- Read docs/architecture.md to understand structural boundaries
 - Break down the requested feature or goal into concrete, small tasks
 - Write each task as a markdown file in tasks/backlog/
 - Never modify source code
