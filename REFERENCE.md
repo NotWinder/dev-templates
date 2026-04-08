@@ -139,8 +139,10 @@ The script:
 layers/ai/  →  layers/cli/  →  base/
 ```
 
-Base is always applied last so its files (`AGENTS.md`, `opencode.json`, etc.) are never
-overwritten by a layer.
+Base is applied first and layers are applied on top so layer-provided implementations (for
+example `cli/scripts/run.sh` or `infra/scripts/lint.sh`) are preserved. After layers are
+applied, the scaffolder re-applies a small set of authoritative base files so they remain
+canonical: `AGENTS.md`, `opencode.json`, and `scripts/validate.sh`.
 
 ---
 
