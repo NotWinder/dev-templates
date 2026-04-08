@@ -135,7 +135,7 @@ done
 # 📜 REQUIRED SCRIPTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-for script in "scripts/run.sh" "scripts/test.sh" "scripts/setup.sh"; do
+for script in "scripts/run.sh" "scripts/test.sh" "scripts/lint.sh" "scripts/setup.sh"; do
   if [[ -f "$script" ]]; then
     pass "Script exists: $script"
   else

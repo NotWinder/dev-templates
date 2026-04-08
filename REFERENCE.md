@@ -336,18 +336,30 @@ Opencode only resolves `@agentname` from `.opencode/agents/`. The template was i
 placing them in `agents/` at the project root — this was fixed. The `ai` layer now scaffolds
 directly into `.opencode/agents/`.
 
-### `base/` applied last (not first)
-Early versions applied base first and layers on top, which caused layer files to overwrite
-base files like `AGENTS.md`. Order was reversed so base always wins.
+### `base/` applied first; layers override scripts; config files re-applied last
+The application order went through two iterations:
+
+1. **v1 (base last):** Base applied after layers so `AGENTS.md` and `opencode.json` always came
+   from base. Problem: base stub scripts (`run.sh`, `test.sh`, `lint.sh`) also "won", overwriting
+   working implementations provided by `cli` and `infra` layers. The builder would then fail on
+   `./scripts/test.sh` and `./scripts/lint.sh` because they exited 1.
+
+2. **v2 (current):** Base is applied first. Layers are applied on top (so `cli/scripts/run.sh`,
+   `cli/scripts/test.sh`, `infra/scripts/lint.sh` survive). Then a final pass re-applies only
+   the three files that must always be canonical base versions: `AGENTS.md`, `opencode.json`,
+   and `scripts/validate.sh`. This preserves both working layer scripts and authoritative base
+   config.
 
 ### `cp -r .` not `cp -r *`
 Glob `*` silently skips dotfiles, which means `.opencode/` would never be copied.
 The script uses `cp -r "$src/." "$DEST/"` to include hidden files and directories.
 
 ### Stub scripts in `base/scripts/`
-`run.sh`, `test.sh`, and `lint.sh` are intentional stubs that exit with an error.
-They exist to keep `AGENTS.md` workflow references valid at all times, and to make
-it obvious when a project hasn't been wired up yet. Replace them at the project level.
+`run.sh`, `test.sh`, and `lint.sh` are intentional fallback stubs that exit with an error.
+They serve as a final safety net for projects where no layer provided a real implementation.
+In practice, the `cli` layer always overrides `run.sh` and `test.sh`, and the `infra` layer
+overrides `lint.sh`. A project using neither of those layers should replace these scripts
+manually before running `/build`.
 
 ### `validate.sh` implemented in `base/scripts/`
 Initially listed as a future improvement, `validate.sh` is now fully implemented. It is a

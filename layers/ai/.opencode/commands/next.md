@@ -21,6 +21,11 @@ Run:
 
 ### Case 1 — NO task in progress (count = 0)
 
+* List all `.md` files in `tasks/backlog/` (exclude `.gitkeep`)
+* If backlog is empty (no `.md` files):
+  * Output:
+    "Backlog is empty. Run the planner first to create tasks: @planner [describe your goal]"
+  * STOP
 * Read `docs/plan.md` to determine task priority order
 * Select the next task from `tasks/backlog/`:
   * Use the order defined in `docs/plan.md` if present

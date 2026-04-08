@@ -23,8 +23,6 @@
 | Run | `./scripts/run.sh` |
 | Test | `./scripts/test.sh` |
 | Lint | `./scripts/lint.sh` |
-| Format | `./scripts/format.sh` |
-| Build | `./scripts/build.sh` |
 
 ## AI Workflow
 

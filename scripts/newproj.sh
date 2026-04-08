@@ -84,6 +84,10 @@ DEST="$PROJECTS_DIR/$NAME"
 mkdir -p "$DEST"
 echo "Scaffolding '$NAME' into $DEST"
 
+# Apply base first so layers can override its stub scripts (run.sh, test.sh, lint.sh)
+echo "  Applying layer: base"
+cp -r "$TEMPLATES_DIR/base/." "$DEST/"
+
 # Apply non-base layers in order (later layers win on conflicts)
 for layer in "${LAYERS[@]}"; do
   [[ "$layer" == "base" ]] && continue
@@ -92,9 +96,13 @@ for layer in "${LAYERS[@]}"; do
   cp -r "$SRC/." "$DEST/"
 done
 
-# Apply base last so base files always win
-echo "  Applying layer: base"
-cp -r "$TEMPLATES_DIR/base/." "$DEST/"
+# Re-apply base config files that must always be canonical regardless of layers.
+# This preserves layer script overrides (run.sh, test.sh, lint.sh) while ensuring
+# AGENTS.md, opencode.json, and validate.sh are always the base versions.
+echo "  Re-applying base config: AGENTS.md, opencode.json, scripts/validate.sh"
+cp "$TEMPLATES_DIR/base/AGENTS.md"             "$DEST/AGENTS.md"
+cp "$TEMPLATES_DIR/base/opencode.json"         "$DEST/opencode.json"
+cp "$TEMPLATES_DIR/base/scripts/validate.sh"   "$DEST/scripts/validate.sh"
 
 # ── substitute [PROJECT_NAME] ─────────────────────────────────────────────────
 

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec python3 -m pytest tests/ -v "$@"
+PYTHONPATH=. exec .venv/bin/pytest tests/ -v "$@"

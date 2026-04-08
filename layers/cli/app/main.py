@@ -7,10 +7,10 @@ def main():
     parser = argparse.ArgumentParser(description="[PROJECT_NAME]")
     parser.add_argument("--version", action="version", version="0.1.0")
 
-    subparsers = parser.add_subparsers(dest="command")
+    _subparsers = parser.add_subparsers(dest="command")
 
     # Add subcommands here
-    # run_parser = subparsers.add_parser("run", help="Run something")
+    # run_parser = _subparsers.add_parser("run", help="Run something")
 
     args = parser.parse_args()
 
